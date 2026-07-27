@@ -43,24 +43,24 @@ def init_db():
     conn.commit()
     conn.close()
 
-# --- AUTOMATIC LINK CAPTION & TEXT SCRAPER ---
+# --- LINK SCRAPER & TITLE EXTRACTOR ---
 def extract_youtube_id(url):
     pattern = r"(?:v=|\/\|vi=|\/v\/|youtu\.be\/|\/embed\/|\/shorts\/)([a-zA-Z0-9_-]{11})"
     match = re.search(pattern, url)
     return match.group(1) if match else None
 
 def fetch_link_caption(url):
-    headers = {
-        "User-Agent": USER_AGENT,
-        "Accept-Language": "tr-TR,tr;q=0.9,az;q=0.8,en-US;q=0.7,en;q=0.6"
-    }
-    extracted_text = ""
-
+    headers = {"User-Agent": USER_AGENT}
+    
+    # 1. YouTube Shorts & Video oEmbed
     if "youtube.com" in url or "youtu.be" in url:
+        clean_url = url.split("?")[0]
         try:
-            res = requests.get(f"https://www.youtube.com/oembed?url={url}&format=json", headers=headers, timeout=10)
+            res = requests.get(f"https://www.youtube.com/oembed?url={clean_url}&format=json", headers=headers, timeout=10)
             if res.status_code == 200:
-                extracted_text = res.json().get("title", "")
+                title = res.json().get("title", "")
+                if title:
+                    return title
         except Exception:
             pass
 
@@ -70,63 +70,28 @@ def fetch_link_caption(url):
                 from youtube_transcript_api import YouTubeTranscriptApi
                 t_list = YouTubeTranscriptApi.get_transcript(video_id, languages=['az', 'tr', 'en'])
                 t_text = " ".join([item['text'] for item in t_list])
-                extracted_text = f"{extracted_text} {t_text}".strip()
+                if t_text:
+                    return t_text[:300]
             except Exception:
                 pass
 
-    if not extracted_text:
-        try:
-            res = requests.get(url, headers=headers, timeout=12, allow_redirects=True)
-            if res.status_code == 200:
-                html = res.text
-                meta_matches = re.findall(r'<meta\s+(?:property|name)=["\'](?:og:description|description|og:title|twitter:description)["\']\s+content=["\']([^"\']+)["\']', html, re.IGNORECASE)
-                if meta_matches:
-                    clean_matches = [m.strip() for m in meta_matches if len(m.strip()) > 8 and "Instagram" not in m and "TikTok" not in m]
-                    if clean_matches:
-                        extracted_text = " ".join(clean_matches)
-        except Exception as e:
-            print(f"Scraping error: {e}")
+    # 2. Instagram & TikTok oEmbed fallback
+    try:
+        clean_url = url.split("?")[0]
+        res = requests.get(f"https://noembed.com/embed?url={clean_url}", headers=headers, timeout=10)
+        if res.status_code == 200:
+            title = res.json().get("title", "")
+            if title and not title.startswith("http") and "Instagram" not in title:
+                return title
+    except Exception:
+        pass
 
-    if not extracted_text:
-        try:
-            oembed_res = requests.get(f"https://noembed.com/embed?url={url}", headers=headers, timeout=10)
-            if oembed_res.status_code == 200:
-                extracted_text = oembed_res.json().get("title", "")
-        except Exception:
-            pass
+    return url
 
-    return extracted_text if extracted_text else url
-
-def build_dynamic_repurpose(input_text):
-    lines = [l.strip() for l in input_text.split("\n") if len(l.strip()) > 5]
-    if not lines:
-        lines = [input_text]
-
-    first_line = lines[0]
-    middle_lines = " ".join(lines[1:4]) if len(lines) > 1 else first_line
-    full_text = " ".join(lines)
-
-    hook = first_line[:80]
-    voice_script = middle_lines[:160] if len(middle_lines) > 20 else full_text[:160]
-    x_post = full_text[:270]
-    linkedin_article = full_text[:600]
-
-    return f"""🎬 <b>1. Shorts / Reels Ssenarisi:</b>
-• <b>Hook:</b> {hook}
-• <b>Səs Mətni:</b> {voice_script}...
-• <b>Vizual:</b> 9:16 vertikal dinamik kadrlar.
-
-🐦 <b>2. X (Twitter) Postu:</b>
-{x_post}... #YITX #Gündəm
-
-💼 <b>3. LinkedIn Məqaləsi:</b>
-{linkedin_article}
-
-#YITX #SocialMedia #Repurpose #AI"""
-
-def generate_ai_repurpose(video_caption):
+# --- SMART DYNAMIC REPURPOSER ENGINE ---
+def smart_repurpose_engine(input_content):
     if GEMINI_API_KEY and GEMINI_API_KEY.startswith("AIzaSy"):
-        prompt = f"Sən YİTX AI Multi-Platform Repurposer-isən. Bu məzmunu 3 hissəyə böl (Shorts Ssenarisi, X postu, LinkedIn Məqaləsi):\n\n{video_caption}"
+        prompt = f"Sən YİTX AI Multi-Platform Repurposer-isən. Bu məzmunu 3 hissəyə böl (Shorts Ssenarisi, X postu, LinkedIn Məqaləsi):\n\n{input_content}"
         for model in ["gemini-2.0-flash", "gemini-1.5-flash"]:
             try:
                 g_url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={GEMINI_API_KEY}"
@@ -138,7 +103,48 @@ def generate_ai_repurpose(video_caption):
             except Exception:
                 pass
 
-    return build_dynamic_repurpose(video_caption)
+    if input_content.startswith("http"):
+        match = re.search(r"/(?:reel|shorts|video)/([^/?]+)", input_content)
+        item_id = match.group(1) if match else "Məzmun"
+        clean_title = f"Sosyal Medya Trendi ({item_id})"
+    else:
+        clean_title = input_content.strip()
+
+    lines = [l.strip() for l in clean_title.split("\n") if len(l.strip()) > 3]
+    first_sentence = lines[0] if lines else clean_title
+    full_text = " ".join(lines) if len(lines) > 1 else clean_title
+
+    hook_text = first_sentence[:80]
+    script_voice = (
+        f"Diqqət! {first_sentence[:100]} haqqında ən son məlumatlar və pərdəarxası məqamlar ortaya çıxdı. "
+        f"Bu məzmunda qeyd olunan faktlar sosial mediada böyük maraq doğurub. "
+        f"Detalları bilmək üçün videonu axıra qədər izləyin!"
+    )
+    
+    x_post = (
+        f"🔥 {first_sentence[:150]}\n\n"
+        f"Günün ən çox müzakirə olunan rəqəmsal kontenti! "
+        f"Detallar haqqında nə düşünürsünüz? #YITX #Viral #Gündəm"
+    )
+    
+    linkedin_article = (
+        f"📊 <b>Biznes və Kontent Analizi: {first_sentence[:100]}</b>\n\n"
+        f"Bugünkü rəqəmsal trendlərdə {full_text[:300]} mövzusu xüsusi diqqət cəlb edir. "
+        f"Brendlər və kontent yaradıcıları üçün bu cür dinamik məzmunlar auditoriya ilə qarşılıqlı təsiri 3 dəfə artırır."
+    )
+
+    return f"""🎬 <b>1. Shorts / Reels Ssenarisi:</b>
+• <b>Hook:</b> 💡 {hook_text}
+• <b>Səs Mətni:</b> {script_voice}
+• <b>Vizual:</b> 9:16 vertikal dinamik kadrlar və 4K vizual effektlər.
+
+🐦 <b>2. X (Twitter) Postu:</b>
+{x_post}
+
+💼 <b>3. LinkedIn Məqaləsi:</b>
+{linkedin_article}
+
+#YITX #SocialMedia #Repurpose #AI"""
 
 # --- TELEGRAM BOT LOGIC ---
 from telegram import Update
@@ -169,9 +175,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("🔄 <b>YİTX:</b> Məzmun təhlil olunur və 3 fərqli formata çevrilir...", parse_mode='HTML')
         if is_url(user_text):
             scraped_caption = fetch_link_caption(user_text)
-            repurposed_text = generate_ai_repurpose(scraped_caption)
+            repurposed_text = smart_repurpose_engine(scraped_caption)
         else:
-            repurposed_text = generate_ai_repurpose(user_text)
+            repurposed_text = smart_repurpose_engine(user_text)
 
         await update.message.reply_text(repurposed_text, parse_mode='HTML')
     except Exception as e:

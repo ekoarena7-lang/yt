@@ -1,0 +1,11 @@
+{
+  "ad": "YİTX Otomasyonu (AI Kontent & Sosial Media Platforması)",
+  "kategori": "Sosyal Medya & İçerik Üretimi",
+  "ozet": "YouTube video linki və ya ideya mətnini götürüb avtomatik mətn, AI şəkil və AI video generasiya edən, çoxlu sosial platformaya (IG, TikTok, YT, X, LinkedIn) avto-paylaşan müstəqil Python platforması.",
+  "eleme": "YouTube Transcript / Prompt -> Gemini LLM Repurposer -> Kie AI Video Engine -> SQLite Queue -> Multi-Social Publisher",
+  "model": "Gemini 3.6 Flash / Kling 3.0 / Veo 3.1 / Flux AI",
+  "sunum": "Telegram Bot İdarəetmə Paneli + Fon Scheduler Servisi",
+  "durum": "aktif",
+  "dahil_et": true,
+  "tetik": "Telegram Bot Komandası / Scheduler Cron"
+}

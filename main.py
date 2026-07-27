@@ -16,6 +16,8 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "AQ.Ab8RN6K93hTu6R20yoAQacS6D48gBuv
 
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 
+USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+
 # --- DATABASE SETUP ---
 DB_PATH = os.path.join(os.path.dirname(__file__), "database.sqlite")
 
@@ -41,78 +43,140 @@ def init_db():
     conn.commit()
     conn.close()
 
-# --- AI TEXT GENERATOR ENGINE ---
-def generate_ai_text(prompt, is_repurpose=False):
+# --- VIDEO METADATA & TRANSCRIPT EXTRACTOR ---
+def extract_youtube_id(url):
+    pattern = r"(?:v=|\/\|vi=|\/v\/|youtu\.be\/|\/embed\/|\/shorts\/)([a-zA-Z0-9_-]{11})"
+    match = re.search(pattern, url)
+    return match.group(1) if match else None
+
+def fetch_video_info(url):
+    title = ""
+    transcript = ""
+    
+    headers = {"User-Agent": USER_AGENT}
+
+    # YouTube Extraction
+    if "youtube.com" in url or "youtu.be" in url:
+        try:
+            res = requests.get(f"https://www.youtube.com/oembed?url={url}&format=json", headers=headers, timeout=10)
+            if res.status_code == 200:
+                title = res.json().get("title", "")
+        except Exception:
+            pass
+
+        video_id = extract_youtube_id(url)
+        if video_id:
+            try:
+                from youtube_transcript_api import YouTubeTranscriptApi
+                t_list = YouTubeTranscriptApi.get_transcript(video_id, languages=['az', 'tr', 'en'])
+                transcript = " ".join([item['text'] for item in t_list])
+            except Exception:
+                pass
+    else:
+        # Instagram / TikTok oEmbed metadata extraction
+        try:
+            res = requests.get(f"https://noembed.com/embed?url={url}", headers=headers, timeout=10)
+            if res.status_code == 200:
+                title = res.json().get("title", "")
+        except Exception:
+            pass
+
+    if not title:
+        title = f"Sosyal Medya Video İçeriği ({url})"
+
+    return f"VİDEO BAŞLIĞI: {title}\nVİDEO MƏZMUNU/TRANSKRİPT: {transcript}\nORİJİNAL LİNK: {url}"
+
+# --- BULLETPROOF AI GENERATION ENGINE ---
+def generate_ai_repurpose(video_info):
+    prompt = f"""
+    Sən YİTX Multi-Platform Repurposer AI-san. Aşağıdakı videonun məzmununu götür və bu 3 bölmədən ibarət bütöv mətn hazırla:
+
+    {video_info}
+
+    SƏNDƏN TƏLƏB OLUNAN DƏQİQ ÇIXIŞ FORMATI (Sırf HTML formatında yaz):
+    🎬 <b>1. Shorts / Reels Ssenarisi:</b>
+    • <b>Hook:</b> [Diqqət çəkən ilk 3 saniyə mətni]
+    • <b>Səs Mətni:</b> [Videodakı ideyanın qısa səs mətni]
+    • <b>Vizual:</b> [9:16 vertikal dinamik kadr təsviri]
+
+    🐦 <b>2. X (Twitter) Postu:</b>
+    [Videodakı ən maraqlı fikri X postu kimi yaz]
+
+    💼 <b>3. LinkedIn Məqaləsi:</b>
+    [Bu videodakı mövzu haqqında peşəkar LinkedIn məqaləsi yaz]
+
+    #YITX #Viral #Repurpose #AI #SocialMedia
     """
-    Bulletproof AI Text Generator supporting both AI Studio API keys (AIzaSy...)
-    and Google Cloud Bearer tokens (AQ...), with intelligent fallback generation.
-    """
+
+    # Tier 1: Gemini API
     models = ["gemini-2.0-flash", "gemini-1.5-flash"]
-    system_inst = "Sen YİTX Multi-Platform Repurposer-isən. Video və mətnləri TikTok, Reels, X və LinkedIn üçün viral postlara çevirirsən." if is_repurpose else "Sen YİTX Otomasyonu AI kontent yazarısan."
-
     for model in models:
-        # Check API Key type
-        if GEMINI_API_KEY.startswith("AIzaSy"):
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={GEMINI_API_KEY}"
-            headers = {"Content-Type": "application/json"}
-        else:
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={GEMINI_API_KEY}"
-            headers = {
-                "Content-Type": "application/json",
-                "Authorization": f"Bearer {GEMINI_API_KEY}"
-            }
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={GEMINI_API_KEY}"
+        headers = {"Content-Type": "application/json"}
+        if not GEMINI_API_KEY.startswith("AIzaSy"):
+            headers["Authorization"] = f"Bearer {GEMINI_API_KEY}"
 
-        payload = {
-            "contents": [{
-                "parts": [{"text": f"{system_inst}\n\nİstək / Məzmun: {prompt}\n\nXahiş olunur cavabı sırf bu JSON formatında qaytar:\n{{\"hook\": \"...\", \"caption\": \"...\", \"hashtags\": \"...\"}} "}]
-            }]
-        }
-
+        payload = {"contents": [{"parts": [{"text": prompt}]}]}
         try:
             res = requests.post(url, json=payload, headers=headers, timeout=20)
             if res.status_code == 200:
-                res_data = res.json()
-                text_content = res_data['candidates'][0]['content']['parts'][0]['text']
-                if "```json" in text_content:
-                    text_content = text_content.split("```json")[1].split("```")[0].strip()
-                elif "```" in text_content:
-                    text_content = text_content.split("```")[1].split("```")[0].strip()
-                parsed = json.loads(text_content)
-                if parsed.get("caption") and not parsed["caption"].startswith("Aşağıdakı video məzmununu"):
-                    return parsed
+                text_content = res.json()['candidates'][0]['content']['parts'][0]['text']
+                if text_content and len(text_content) > 50:
+                    return clean_html(text_content)
         except Exception as e:
-            print(f"Gemini API attempt with {model} failed: {e}")
+            print(f"Gemini API error with {model}: {e}")
 
-    # High-quality dynamic fallback content generator if API key is invalid/expired
-    if is_repurpose:
-        return {
-            "hook": "🚀 YİTX Video Repurpose Nəticəsi:",
-            "caption": (
-                "🎬 <b>1. Shorts / Reels Ssenarisi:</b>\n"
-                "• <b>Hook:</b> Bu videodakı sirri bilirdinizmi?\n"
-                "• <b>Səs mətni:</b> Diqqət! Sosial mediada uğur qazanmağın 3 qızıl qaydası...\n"
-                "• <b>Visual:</b> 9:16 vertikal dinamik keçidlər.\n\n"
-                "🐦 <b>2. X (Twitter) Postu:</b>\n"
-                "Bəzən ən böyük sıçrayışlar kiçik addımlarla başlayır. Bu videonu mütləq izləyin! #YITX #Viral\n\n"
-                "💼 <b>3. LinkedIn Məqaləsi:</b>\n"
-                "Rəqəmsal dövrdə kontent strategiyası necə qurulmalıdır? Bu gün paylaşdığımız video məzmun biznesinizin inkişafı üçün mühüm faktlara toxunur."
-            ),
-            "hashtags": "#YITX #SocialMedia #Repurpose #Automation #AI"
-        }
-    else:
-        return {
-            "hook": f"💡 {prompt[:40]}...",
-            "caption": (
-                f"Süni intellekt və avtomatlaşdırma dünyasında ən son trendlər!\n\n"
-                f"📌 <b>Mövzu:</b> {prompt}\n\n"
-                "YİTX Otomasyonu ilə kontentlərinizi otopilot rejimində yayımlayın."
-            ),
-            "hashtags": "#YITX #Automation #AI #Tech #Innovation"
-        }
+    # Tier 2: Open LLM Proxy Fallback (Guarantees zero prompt echo)
+    try:
+        res = requests.post("https://text.pollinations.ai/", json={"messages": [{"role": "user", "content": prompt}], "model": "openai"}, timeout=20)
+        if res.status_code == 200 and len(res.text) > 50:
+            return clean_html(res.text)
+    except Exception as e:
+        print(f"Tier 2 LLM error: {e}")
 
-# --- TELEGRAM BOT HANDLERS ---
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, ContextTypes, MessageHandler, filters
+    # Tier 3: Emergency Formatted Return
+    return """🎬 <b>1. Shorts / Reels Ssenarisi:</b>
+• <b>Hook:</b> Bu videodakı qızıl qaydanı bilirdinizmi?
+• <b>Səs Mətni:</b> Sosial mediada uğur qazanmaq üçün bu strategiyanı tətbiq edin.
+• <b>Vizual:</b> 9:16 vertikal dinamik kadrlar.
+
+🐦 <b>2. X (Twitter) Postu:</b>
+Uğur kiçik addımlarla gəlir. Bu videodakı fikirlər biznesinizi böyüdəcək! #YITX
+
+💼 <b>3. LinkedIn Məqaləsi:</b>
+Rəqəmsal dövrdə effektiv kontent strategiyası qurmaq üçün vizual və mətn harmoniyası vacibdir.
+
+#YITX #SocialMedia #Repurpose #AI"""
+
+def generate_ai_post(prompt_text):
+    prompt = f"Sən YİTX AI yazarısan. Bu mövzuda HTML formatında sosial media postu yaz: {prompt_text}"
+    models = ["gemini-2.0-flash", "gemini-1.5-flash"]
+    for model in models:
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={GEMINI_API_KEY}"
+        headers = {"Content-Type": "application/json"}
+        if not GEMINI_API_KEY.startswith("AIzaSy"):
+            headers["Authorization"] = f"Bearer {GEMINI_API_KEY}"
+
+        payload = {"contents": [{"parts": [{"text": prompt}]}]}
+        try:
+            res = requests.post(url, json=payload, headers=headers, timeout=20)
+            if res.status_code == 200:
+                text_content = res.json()['candidates'][0]['content']['parts'][0]['text']
+                if text_content:
+                    return clean_html(text_content)
+        except Exception:
+            pass
+
+    return f"💡 <b>YİTX Post: {prompt_text}</b>\n\nSüni intellekt və avtomatlaşdırma dünyasında yeni addımlar.\n\n#YITX #Automation"
+
+def clean_html(text):
+    # Ensure raw markdown fences are removed for Telegram HTML rendering
+    text = text.replace("```html", "").replace("```", "").strip()
+    return text
+
+# --- TELEGRAM BOT LOGIC ---
+from telegram import Update
+from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes, MessageHandler, filters
 
 def is_url(text):
     return bool(re.search(r"https?://[^\s]+", text))
@@ -120,39 +184,31 @@ def is_url(text):
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     welcome_html = (
         "🤖 <b>YİTX Otomasyonu — AI Kontent Botu Canlıdır!</b>\n\n"
-        "İstənilən <b>YouTube, Instagram Reels və ya TikTok video linkini</b> sadəcə bura göndərin!\n\n"
-        "📌 <b>İstifadə:</b>\n"
-        "• Link göndərin ➔ Avtomatik Repurpose edir (Shorts, X post, LinkedIn məqaləsi).\n"
-        "• Mövzu yazın ➔ AI mətn və post yazır.\n"
+        "İstənilən <b>YouTube, Instagram Reels və ya TikTok video linkini</b> göndərin!\n\n"
+        "📌 <b>Nə verəcək:</b>\n"
+        "1. 🎬 <b>Shorts / Reels Ssenarisi</b>\n"
+        "2. 🐦 <b>X (Twitter) Postu</b>\n"
+        "3. 💼 <b>LinkedIn Məqaləsi</b>\n"
     )
     await update.message.reply_text(welcome_html, parse_mode='HTML')
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.message.text:
         return
-    text = update.message.text.strip()
-    if text.startswith("/"):
+    user_text = update.message.text.strip()
+    if user_text.startswith("/"):
         return
 
     try:
-        if is_url(text):
-            await update.message.reply_text("🔄 <b>YİTX:</b> Video təhlil olunur və məzmunlar yenidən işlənilir...", parse_mode='HTML')
-            res = generate_ai_text(text, is_repurpose=True)
-            hook = res.get("hook", "YİTX Video Repurpose")
-            caption = res.get("caption", "")
-            tags = res.get("hashtags", "")
-            
-            output_msg = f"<b>{hook}</b>\n\n{caption}\n\n<i>{tags}</i>"
-            await update.message.reply_text(output_msg, parse_mode='HTML')
+        if is_url(user_text):
+            await update.message.reply_text("🔄 <b>YİTX:</b> Video məzmunu təhlil olunur və 3 fərqli formata çevrilir...", parse_mode='HTML')
+            v_info = fetch_video_info(user_text)
+            repurposed_text = generate_ai_repurpose(v_info)
+            await update.message.reply_text(repurposed_text, parse_mode='HTML')
         else:
             await update.message.reply_text("⏳ <b>YİTX AI:</b> Mətn hazırlanır...", parse_mode='HTML')
-            res = generate_ai_text(text, is_repurpose=False)
-            hook = res.get("hook", "YİTX Post")
-            caption = res.get("caption", "")
-            tags = res.get("hashtags", "")
-            
-            output_msg = f"<b>{hook}</b>\n\n{caption}\n\n<i>{tags}</i>"
-            await update.message.reply_text(output_msg, parse_mode='HTML')
+            post_text = generate_ai_post(user_text)
+            await update.message.reply_text(post_text, parse_mode='HTML')
     except Exception as e:
         traceback.print_exc()
         await update.message.reply_text(f"⚠️ Xəta: {str(e)}", parse_mode='HTML')

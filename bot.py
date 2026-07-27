@@ -43,7 +43,7 @@ def init_db():
     conn.commit()
     conn.close()
 
-# --- HIGH PRECISION INSTAGRAM & YOUTUBE SCRAPER ---
+# --- HIGH PRECISION METADATA EXTRACTOR ---
 def extract_youtube_id(url):
     pattern = r"(?:v=|\/\|vi=|\/v\/|youtu\.be\/|\/embed\/|\/shorts\/)([a-zA-Z0-9_-]{11})"
     match = re.search(pattern, url)
@@ -70,13 +70,7 @@ def extract_instagram_caption(url):
 def fetch_link_caption(url):
     headers = {"User-Agent": USER_AGENT}
 
-    # 1. Instagram Extraction
-    if "instagram.com" in url:
-        caption = extract_instagram_caption(url)
-        if caption:
-            return caption
-
-    # 2. YouTube Shorts & Video oEmbed
+    # 1. YouTube Extraction (Supports both watch?v= and shorts/)
     if "youtube.com" in url or "youtu.be" in url:
         video_id = extract_youtube_id(url)
         if video_id:
@@ -99,6 +93,12 @@ def fetch_link_caption(url):
             except Exception:
                 pass
 
+    # 2. Instagram Extraction
+    if "instagram.com" in url:
+        caption = extract_instagram_caption(url)
+        if caption:
+            return caption
+
     # 3. Generic fallback
     try:
         clean_url = url.split("?")[0]
@@ -115,7 +115,7 @@ def fetch_link_caption(url):
 # --- FULL BLOTATO REPURPOSER ENGINE ---
 def generate_full_blotato_repurpose(input_content):
     clean_title = input_content.strip()
-    if clean_title.startswith("http") or len(clean_title) < 5:
+    if clean_title.startswith("http") or len(clean_title) < 4:
         clean_title = "Sosyal Medya Video İçeriği"
 
     if GEMINI_API_KEY and GEMINI_API_KEY.startswith("AIzaSy"):
@@ -134,31 +134,44 @@ def generate_full_blotato_repurpose(input_content):
             except Exception:
                 pass
 
-    shorts_scripts = []
-    for i in range(1, 4):
-        shorts_scripts.append(
-            f"🎬 <b>Ssenari {i}:</b>\n"
-            f"• <b>Hook:</b> 💡 {clean_title[:70]} haqqında bunu bilirdinizmi? (Hissə {i})\n"
-            f"• <b>Səs Mətni:</b> Diqqət! {clean_title} mövzusunda {i}-ci mühüm fakt və pərdəarxası məqamlar...\n"
-            f"• <b>Vizual:</b> 9:16 vertikal dinamik kadrlar, 4K vizual effektlər.\n"
-        )
-    
-    x_posts = []
-    for i in range(1, 6):
-        x_posts.append(f"{i}. 📌 {clean_title[:80]} — Hissə {i}. Detallar üçün bizi izləyin! #YITX #Viral")
+    shorts_scripts = [
+        f"🎬 <b>Ssenari 1:</b>\n"
+        f"• <b>Hook:</b> 💡 {clean_title} haqqında bu gizli məqamı bilirdinizmi?\n"
+        f"• <b>Səs Mətni:</b> Diqqət! {clean_title} mövzusunda ən son rəqəmsal trendlər və tətbiq qaydaları ortaya çıxdı! Bu metodu sınaqdan keçirin.\n"
+        f"• <b>Vizual:</b> 9:16 vertikal dinamik kadrlar, 4K vizual effektlər.\n",
 
-    linkedin_posts = []
-    for i in range(1, 3):
-        linkedin_posts.append(
-            f"💼 <b>LinkedIn Məqaləsi {i}: {clean_title[:60]}</b>\n"
-            f"Rəqəmsal strategiya və {clean_title} mövzusunda peşəkar analiz. Bu addım biznesinizin inkişafı üçün mühüm faktları ehtiva edir."
-        )
+        f"🎬 <b>Ssenari 2:</b>\n"
+        f"• <b>Hook:</b> 🚀 30 saniyədə {clean_title} necə tətbiq olunur?\n"
+        f"• <b>Səs Mətni:</b> Əgər siz də kontentlərinizdə yüksək keyfiyyət axtarırsınızsa, {clean_title} vasitəsilə 3 dəfə sürətli nəticə ala bilərsiniz!\n"
+        f"• <b>Vizual:</b> Ekran yazısı və addım-addım tətbiq kadrları.\n",
+
+        f"🎬 <b>Ssenari 3:</b>\n"
+        f"• <b>Hook:</b> ⚠️ {clean_title} istifadə edərkən bu 3 səhvi etməyin!\n"
+        f"• <b>Səs Mətni:</b> Çoxları bu aləti yanlış istifadə edir. Lakin bu 3 addımı izləməklə qüsursuz kontent yarada bilərsiniz.\n"
+        f"• <b>Vizual:</b> Dinamik xəbərdarlıq qrafikləri və effektlər.\n"
+    ]
+
+    x_posts = [
+        f"1. 📌 {clean_title} — Rəqəmsal dünyada ən son trend! Detallar üçün bizi izləyin. #YITX #AI #Viral",
+        f"2. 🔥 {clean_title} ilə kontent istehsalını 5 dəfə sürətləndirin. #Tech #Automation",
+        f"3. 💡 Məzmun yaradıcıları üçün ən mühüm alət: {clean_title}. Sınaqdan keçirdinizmi? #Gündəm",
+        f"4. ⚡ {clean_title} haqqında pərdəarxası məqamlar və praktiki məsləhətlər. #ArtificialIntelligence",
+        f"5. 🎯 Auditoriyanızı heyran edəcək yeni metod: {clean_title}. #ContentCreator"
+    ]
+
+    linkedin_posts = [
+        f"💼 <b>LinkedIn Məqaləsi 1: {clean_title}</b>\n"
+        f"Rəqəmsal dövrdə {clean_title} mövzusu bizneslər və kontent yaradıcıları üçün yeni imkanlar açır. Bu alətin tətbiqi rəqabətdə öndə olmağa imkan verir.",
+
+        f"💼 <b>LinkedIn Məqaləsi 2: Strateji Baxış — {clean_title}</b>\n"
+        f"Effektiv məzmun idarəçiliyi üçün {clean_title} həlləri auditoriya ilə qarşılıqlı əlaqəni 300% artırır."
+    ]
 
     ig_captions = (
         f"📸 <b>Instagram Captions & Hashtags:</b>\n"
-        f"1. {clean_title[:100]} 🔥\n"
-        f"2. Günün ən çox müzakirə olunan məzmunu: {clean_title[:80]} ✨\n"
-        f"3. YİTX Otomasyonu ilə kontentlərinizi otopilot rejimində yayımlayın 🚀\n"
+        f"1. {clean_title} 🔥 Günün ən vacib trendi!\n"
+        f"2. Kontentlərinizi {clean_title} ilə yeni səviyyəyə qaldırın 🚀\n"
+        f"3. YİTX Otomasyonu ilə kontentlərinizi otopilot rejimində yayımlayın ✨\n"
     )
 
     full_output = (

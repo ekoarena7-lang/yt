@@ -50,16 +50,12 @@ def extract_youtube_id(url):
     return match.group(1) if match else None
 
 def fetch_link_caption(url):
-    """
-    Automatically scrapes the video caption/description directly from Instagram Reels, TikTok, or YouTube link.
-    """
     headers = {
         "User-Agent": USER_AGENT,
         "Accept-Language": "tr-TR,tr;q=0.9,az;q=0.8,en-US;q=0.7,en;q=0.6"
     }
     extracted_text = ""
 
-    # YouTube Specific
     if "youtube.com" in url or "youtu.be" in url:
         try:
             res = requests.get(f"https://www.youtube.com/oembed?url={url}&format=json", headers=headers, timeout=10)
@@ -78,7 +74,6 @@ def fetch_link_caption(url):
             except Exception:
                 pass
 
-    # Instagram & TikTok Scraper
     if not extracted_text:
         try:
             res = requests.get(url, headers=headers, timeout=12, allow_redirects=True)
@@ -92,7 +87,6 @@ def fetch_link_caption(url):
         except Exception as e:
             print(f"Scraping error: {e}")
 
-    # Noembed oEmbed fallback
     if not extracted_text:
         try:
             oembed_res = requests.get(f"https://noembed.com/embed?url={url}", headers=headers, timeout=10)
@@ -103,77 +97,48 @@ def fetch_link_caption(url):
 
     return extracted_text if extracted_text else url
 
-# --- 100% RELIABLE LLM REPURPOSER ---
-def generate_ai_repurpose(video_caption, raw_url):
-    prompt = f"""
-    Sən YİTX Multi-Platform Repurposer AI-san.
-    Aşağıda istifadəçinin göndərdiyi sosial media video linkindən avtomatik oxunan tam mətn verilib:
+def build_dynamic_repurpose(input_text):
+    lines = [l.strip() for l in input_text.split("\n") if len(l.strip()) > 5]
+    if not lines:
+        lines = [input_text]
 
-    LİNKDƏN ÇIXARILAN MƏZMUN:
-    {video_caption}
+    first_line = lines[0]
+    middle_lines = " ".join(lines[1:4]) if len(lines) > 1 else first_line
+    full_text = " ".join(lines)
 
-    ORİJİNAL LİNK:
-    {raw_url}
+    hook = first_line[:80]
+    voice_script = middle_lines[:160] if len(middle_lines) > 20 else full_text[:160]
+    x_post = full_text[:270]
+    linkedin_article = full_text[:600]
 
-    XAHİŞ OLUNUR YUXARIDAKI MƏZMUNU OXUYUB BU 3 DƏQİQ BÖLMƏNİ YARAT (Sırf HTML formatında yaz):
-    🎬 <b>1. Shorts / Reels Ssenarisi:</b>
-    • <b>Hook:</b> [Yuxarıdakı videonun məzmunundan diqqət çəkən ilk 3 saniyə mətni]
-    • <b>Səs Mətni:</b> [Yuxarıdakı videodakı ideyadan 30 saniyəlik səs mətni]
-    • <b>Vizual:</b> [9:16 vertikal dinamik kadr təsviri]
-
-    🐦 <b>2. X (Twitter) Postu:</b>
-    [Yuxarıdakı video məzmunundan hazırlanmış 280 simvolluq X postu]
-
-    💼 <b>3. LinkedIn Məqaləsi:</b>
-    [Yuxarıdakı mövzu haqqında peşəkar 2 paraqraflıq LinkedIn məqaləsi]
-
-    #YITX #Viral #Repurpose #AI #SocialMedia
-    """
-
-    # 1. Try Pollinations Free LLM API
-    try:
-        res = requests.post("https://text.pollinations.ai/", json={"messages": [{"role": "user", "content": prompt}], "model": "openai"}, timeout=25)
-        if res.status_code == 200 and len(res.text) > 80:
-            return res.text.replace("```html", "").replace("```", "").strip()
-    except Exception as e:
-        print(f"Pollinations LLM error: {e}")
-
-    # 2. Try Gemini API if valid key is set
-    if GEMINI_API_KEY and GEMINI_API_KEY.startswith("AIzaSy"):
-        for model in ["gemini-2.0-flash", "gemini-1.5-flash"]:
-            try:
-                g_url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={GEMINI_API_KEY}"
-                res = requests.post(g_url, json={"contents": [{"parts": [{"text": prompt}]}]}, timeout=20)
-                if res.status_code == 200:
-                    text_content = res.json()['candidates'][0]['content']['parts'][0]['text']
-                    return text_content.replace("```html", "").replace("```", "").strip()
-            except Exception as e:
-                print(f"Gemini API error: {e}")
-
-    # 3. Smart Contextual Return
     return f"""🎬 <b>1. Shorts / Reels Ssenarisi:</b>
-• <b>Hook:</b> {video_caption[:60]}... Bilirdinizmi?
-• <b>Səs Mətni:</b> Bu video haqqında mühüm faktlar ortaya çıxdı!
+• <b>Hook:</b> {hook}
+• <b>Səs Mətni:</b> {voice_script}...
 • <b>Vizual:</b> 9:16 vertikal dinamik kadrlar.
 
 🐦 <b>2. X (Twitter) Postu:</b>
-{video_caption[:200]}... #YITX
+{x_post}... #YITX #Gündəm
 
 💼 <b>3. LinkedIn Məqaləsi:</b>
-{video_caption}
+{linkedin_article}
 
 #YITX #SocialMedia #Repurpose #AI"""
 
-def generate_ai_post(prompt_text):
-    prompt = f"Sən YİTX AI yazarısan. Bu mövzuda HTML formatında sosial media postu yaz: {prompt_text}"
-    try:
-        res = requests.post("https://text.pollinations.ai/", json={"messages": [{"role": "user", "content": prompt}], "model": "openai"}, timeout=20)
-        if res.status_code == 200 and len(res.text) > 30:
-            return res.text.replace("```html", "").replace("```", "").strip()
-    except Exception:
-        pass
+def generate_ai_repurpose(video_caption):
+    if GEMINI_API_KEY and GEMINI_API_KEY.startswith("AIzaSy"):
+        prompt = f"Sən YİTX AI Multi-Platform Repurposer-isən. Bu məzmunu 3 hissəyə böl (Shorts Ssenarisi, X postu, LinkedIn Məqaləsi):\n\n{video_caption}"
+        for model in ["gemini-2.0-flash", "gemini-1.5-flash"]:
+            try:
+                g_url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={GEMINI_API_KEY}"
+                res = requests.post(g_url, json={"contents": [{"parts": [{"text": prompt}]}]}, timeout=15)
+                if res.status_code == 200:
+                    text_content = res.json()['candidates'][0]['content']['parts'][0]['text']
+                    if len(text_content) > 50:
+                        return text_content.replace("```html", "").replace("```", "").strip()
+            except Exception:
+                pass
 
-    return f"💡 <b>YİTX Post: {prompt_text}</b>\n\nSüni intellekt və avtomatlaşdırma dünyasında yeni addımlar.\n\n#YITX #Automation"
+    return build_dynamic_repurpose(video_caption)
 
 # --- TELEGRAM BOT LOGIC ---
 from telegram import Update
@@ -185,7 +150,7 @@ def is_url(text):
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     welcome_html = (
         "🤖 <b>YİTX Otomasyonu — AI Kontent Botu Canlıdır!</b>\n\n"
-        "İstənilən <b>YouTube, Instagram Reels və ya TikTok video linkini</b> sadəcə bura göndərin!\n\n"
+        "İstənilən <b>YouTube, Instagram Reels və ya TikTok video linkini VƏ YA mətnini</b> göndərin!\n\n"
         "📌 <b>Nə verəcək:</b>\n"
         "1. 🎬 <b>Shorts / Reels Ssenarisi</b>\n"
         "2. 🐦 <b>X (Twitter) Postu</b>\n"
@@ -201,15 +166,14 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     try:
+        await update.message.reply_text("🔄 <b>YİTX:</b> Məzmun təhlil olunur və 3 fərqli formata çevrilir...", parse_mode='HTML')
         if is_url(user_text):
-            await update.message.reply_text("🔄 <b>YİTX:</b> Linkdən məzmun oxunur və 3 fərqli formata çevrilir...", parse_mode='HTML')
             scraped_caption = fetch_link_caption(user_text)
-            repurposed_text = generate_ai_repurpose(scraped_caption, user_text)
-            await update.message.reply_text(repurposed_text, parse_mode='HTML')
+            repurposed_text = generate_ai_repurpose(scraped_caption)
         else:
-            await update.message.reply_text("⏳ <b>YİTX AI:</b> Mətn hazırlanır...", parse_mode='HTML')
-            post_text = generate_ai_post(user_text)
-            await update.message.reply_text(post_text, parse_mode='HTML')
+            repurposed_text = generate_ai_repurpose(user_text)
+
+        await update.message.reply_text(repurposed_text, parse_mode='HTML')
     except Exception as e:
         traceback.print_exc()
         await update.message.reply_text(f"⚠️ Xəta: {str(e)}", parse_mode='HTML')

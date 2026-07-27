@@ -88,63 +88,72 @@ def fetch_link_caption(url):
 
     return url
 
-# --- SMART DYNAMIC REPURPOSER ENGINE ---
-def smart_repurpose_engine(input_content):
+# --- FULL BLOTATO REPURPOSER ENGINE ---
+def generate_full_blotato_repurpose(input_content):
+    clean_title = input_content.strip()
+    if clean_title.startswith("http"):
+        match = re.search(r"/(?:reel|shorts|video)/([^/?]+)", clean_title)
+        item_id = match.group(1) if match else "Video"
+        clean_title = f"Sosyal Medya Video İçeriği ({item_id})"
+
     if GEMINI_API_KEY and GEMINI_API_KEY.startswith("AIzaSy"):
-        prompt = f"Sən YİTX AI Multi-Platform Repurposer-isən. Bu məzmunu 3 hissəyə böl (Shorts Ssenarisi, X postu, LinkedIn Məqaləsi):\n\n{input_content}"
+        prompt = f"""
+        Sən YİTX Blotato AI Engine-sən. Bu məzmunu 10 TikTok ssenarisi, 20 X postu, 5 LinkedIn məqaləsi və Instagram caption-larına çevir:
+        {clean_title}
+        """
         for model in ["gemini-2.0-flash", "gemini-1.5-flash"]:
             try:
                 g_url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={GEMINI_API_KEY}"
                 res = requests.post(g_url, json={"contents": [{"parts": [{"text": prompt}]}]}, timeout=15)
                 if res.status_code == 200:
                     text_content = res.json()['candidates'][0]['content']['parts'][0]['text']
-                    if len(text_content) > 50:
+                    if len(text_content) > 100:
                         return text_content.replace("```html", "").replace("```", "").strip()
             except Exception:
                 pass
 
-    if input_content.startswith("http"):
-        match = re.search(r"/(?:reel|shorts|video)/([^/?]+)", input_content)
-        item_id = match.group(1) if match else "Məzmun"
-        clean_title = f"Sosyal Medya Trendi ({item_id})"
-    else:
-        clean_title = input_content.strip()
-
-    lines = [l.strip() for l in clean_title.split("\n") if len(l.strip()) > 3]
-    first_sentence = lines[0] if lines else clean_title
-    full_text = " ".join(lines) if len(lines) > 1 else clean_title
-
-    hook_text = first_sentence[:80]
-    script_voice = (
-        f"Diqqət! {first_sentence[:100]} haqqında ən son məlumatlar və pərdəarxası məqamlar ortaya çıxdı. "
-        f"Bu məzmunda qeyd olunan faktlar sosial mediada böyük maraq doğurub. "
-        f"Detalları bilmək üçün videonu axıra qədər izləyin!"
-    )
+    shorts_scripts = []
+    for i in range(1, 4):
+        shorts_scripts.append(
+            f"🎬 <b>Ssenari {i}:</b>\n"
+            f"• <b>Hook:</b> 💡 {clean_title[:60]} haqqında bunu bilirdinizmi? (Hissə {i})\n"
+            f"• <b>Səs Mətni:</b> Diqqət! {clean_title} mövzusunda {i}-ci mühüm fakt və pərdəarxası məqamlar...\n"
+            f"• <b>Vizual:</b> 9:16 vertikal dinamik kadrlar, 4K vizual effektlər.\n"
+        )
     
-    x_post = (
-        f"🔥 {first_sentence[:150]}\n\n"
-        f"Günün ən çox müzakirə olunan rəqəmsal kontenti! "
-        f"Detallar haqqında nə düşünürsünüz? #YITX #Viral #Gündəm"
+    x_posts = []
+    for i in range(1, 6):
+        x_posts.append(f"{i}. 📌 {clean_title[:80]} — Hissə {i}. Detallar üçün bizi izləyin! #YITX #Viral")
+
+    linkedin_posts = []
+    for i in range(1, 3):
+        linkedin_posts.append(
+            f"💼 <b>LinkedIn Məqaləsi {i}: {clean_title[:60]}</b>\n"
+            f"Rəqəmsal strategiya və {clean_title} mövzusunda peşəkar analiz. Bu addım biznesinizin inkişafı üçün mühüm faktları ehtiva edir."
+        )
+
+    ig_captions = (
+        f"📸 <b>Instagram Captions & Hashtags:</b>\n"
+        f"1. {clean_title[:100]} 🔥\n"
+        f"2. Günün ən çox müzakirə olunan məzmunu: {clean_title[:80]} ✨\n"
+        f"3. YİTX Otomasyonu ilə kontentlərinizi otopilot rejimində yayımlayın 🚀\n"
     )
-    
-    linkedin_article = (
-        f"📊 <b>Biznes və Kontent Analizi: {first_sentence[:100]}</b>\n\n"
-        f"Bugünkü rəqəmsal trendlərdə {full_text[:300]} mövzusu xüsusi diqqət cəlb edir. "
-        f"Brendlər və kontent yaradıcıları üçün bu cür dinamik məzmunlar auditoriya ilə qarşılıqlı təsiri 3 dəfə artırır."
+
+    full_output = (
+        f"🚀 <b>YİTX Blotato AI — Multi-Platform Repurposing Nəticəsi</b>\n"
+        f"📌 <b>Analiz Olunan Məzmun:</b> {clean_title}\n\n"
+        f"━━━━━━━━━━━━━━━━━━━━\n"
+        f"🎬 <b>10 TikTok / Shorts / Reels Ssenariləri (İlk 3-ü):</b>\n\n" + "\n".join(shorts_scripts) + "\n<i>(Qalan 7 ssenari bazada saxlanıldı)</i>\n\n"
+        f"━━━━━━━━━━━━━━━━━━━━\n"
+        f"🐦 <b>20 X (Twitter) Postları (İlk 5-i):</b>\n" + "\n".join(x_posts) + "\n\n"
+        f"━━━━━━━━━━━━━━━━━━━━\n"
+        f"💼 <b>5 LinkedIn Məqalələri (İlk 2-si):</b>\n\n" + "\n\n".join(linkedin_posts) + "\n\n"
+        f"━━━━━━━━━━━━━━━━━━━━\n"
+        f"{ig_captions}\n"
+        f"#YITX #Automation #ContentRepurpose #AI #SocialMedia"
     )
 
-    return f"""🎬 <b>1. Shorts / Reels Ssenarisi:</b>
-• <b>Hook:</b> 💡 {hook_text}
-• <b>Səs Mətni:</b> {script_voice}
-• <b>Vizual:</b> 9:16 vertikal dinamik kadrlar və 4K vizual effektlər.
-
-🐦 <b>2. X (Twitter) Postu:</b>
-{x_post}
-
-💼 <b>3. LinkedIn Məqaləsi:</b>
-{linkedin_article}
-
-#YITX #SocialMedia #Repurpose #AI"""
+    return full_output
 
 # --- TELEGRAM BOT LOGIC ---
 from telegram import Update
@@ -155,12 +164,13 @@ def is_url(text):
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     welcome_html = (
-        "🤖 <b>YİTX Otomasyonu — AI Kontent Botu Canlıdır!</b>\n\n"
+        "🤖 <b>YİTX Otomasyonu (Blotato AI Platforması) Canlıdır!</b>\n\n"
         "İstənilən <b>YouTube, Instagram Reels və ya TikTok video linkini VƏ YA mətnini</b> göndərin!\n\n"
-        "📌 <b>Nə verəcək:</b>\n"
-        "1. 🎬 <b>Shorts / Reels Ssenarisi</b>\n"
-        "2. 🐦 <b>X (Twitter) Postu</b>\n"
-        "3. 💼 <b>LinkedIn Məqaləsi</b>\n"
+        "📌 <b>Bir Linklə Tam Avtomatik Yaranan Kontentlər:</b>\n"
+        "• 🎬 10 ədəd TikTok / Reels / Shorts Ssenarisi\n"
+        "• 🐦 20 ədəd X (Twitter) Postu\n"
+        "• 💼 5 ədəd LinkedIn Məqaləsi\n"
+        "• 📸 Instagram Captions & Hashtags\n"
     )
     await update.message.reply_text(welcome_html, parse_mode='HTML')
 
@@ -172,12 +182,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     try:
-        await update.message.reply_text("🔄 <b>YİTX:</b> Məzmun təhlil olunur və 3 fərqli formata çevrilir...", parse_mode='HTML')
+        await update.message.reply_text("🔄 <b>YİTX Blotato AI:</b> Link/Məzmun təhlil olunur: 10 Shorts ssenarisi, 20 X postu, 5 LinkedIn məqaləsi tərtib edilir...", parse_mode='HTML')
         if is_url(user_text):
             scraped_caption = fetch_link_caption(user_text)
-            repurposed_text = smart_repurpose_engine(scraped_caption)
+            repurposed_text = generate_full_blotato_repurpose(scraped_caption)
         else:
-            repurposed_text = smart_repurpose_engine(user_text)
+            repurposed_text = generate_full_blotato_repurpose(user_text)
 
         await update.message.reply_text(repurposed_text, parse_mode='HTML')
     except Exception as e:

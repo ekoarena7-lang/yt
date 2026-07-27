@@ -43,58 +43,80 @@ def init_db():
     conn.commit()
     conn.close()
 
-# --- LINK SCRAPER & TITLE EXTRACTOR ---
+# --- HIGH PRECISION INSTAGRAM & YOUTUBE SCRAPER ---
 def extract_youtube_id(url):
     pattern = r"(?:v=|\/\|vi=|\/v\/|youtu\.be\/|\/embed\/|\/shorts\/)([a-zA-Z0-9_-]{11})"
     match = re.search(pattern, url)
     return match.group(1) if match else None
 
+def extract_instagram_caption(url):
+    match = re.search(r"/(?:reel|p)/([a-zA-Z0-9_-]+)", url)
+    if not match:
+        return ""
+    shortcode = match.group(1)
+    embed_url = f"https://www.instagram.com/p/{shortcode}/embed/captioned/"
+    headers = {"User-Agent": USER_AGENT}
+    try:
+        res = requests.get(embed_url, headers=headers, timeout=10)
+        if res.status_code == 200:
+            m = re.search(r'"edge_media_to_caption"\s*:\s*\{\"edges\"\s*:\s*\[\{\"node\"\s*:\s*\{\"text\"\s*:\s*\"(.*?)\"', res.text)
+            if m:
+                caption = m.group(1).encode('utf-8').decode('unicode-escape')
+                return caption.strip()
+    except Exception as e:
+        print(f"Instagram Embed Extraction Error: {e}")
+    return ""
+
 def fetch_link_caption(url):
     headers = {"User-Agent": USER_AGENT}
-    
-    # 1. YouTube Shorts & Video oEmbed
-    if "youtube.com" in url or "youtu.be" in url:
-        clean_url = url.split("?")[0]
-        try:
-            res = requests.get(f"https://www.youtube.com/oembed?url={clean_url}&format=json", headers=headers, timeout=10)
-            if res.status_code == 200:
-                title = res.json().get("title", "")
-                if title:
-                    return title
-        except Exception:
-            pass
 
+    # 1. Instagram Extraction
+    if "instagram.com" in url:
+        caption = extract_instagram_caption(url)
+        if caption:
+            return caption
+
+    # 2. YouTube Shorts & Video oEmbed
+    if "youtube.com" in url or "youtu.be" in url:
         video_id = extract_youtube_id(url)
         if video_id:
+            try:
+                oembed_url = f"https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v={video_id}&format=json"
+                res = requests.get(oembed_url, headers=headers, timeout=10)
+                if res.status_code == 200:
+                    title = res.json().get("title", "")
+                    if title:
+                        return title
+            except Exception:
+                pass
+            
             try:
                 from youtube_transcript_api import YouTubeTranscriptApi
                 t_list = YouTubeTranscriptApi.get_transcript(video_id, languages=['az', 'tr', 'en'])
                 t_text = " ".join([item['text'] for item in t_list])
                 if t_text:
-                    return t_text[:300]
+                    return t_text[:400]
             except Exception:
                 pass
 
-    # 2. Instagram & TikTok oEmbed fallback
+    # 3. Generic fallback
     try:
         clean_url = url.split("?")[0]
         res = requests.get(f"https://noembed.com/embed?url={clean_url}", headers=headers, timeout=10)
         if res.status_code == 200:
             title = res.json().get("title", "")
-            if title and not title.startswith("http") and "Instagram" not in title:
+            if title and not title.startswith("http"):
                 return title
     except Exception:
         pass
 
-    return url
+    return "Sosyal Medya Video İçeriği"
 
 # --- FULL BLOTATO REPURPOSER ENGINE ---
 def generate_full_blotato_repurpose(input_content):
     clean_title = input_content.strip()
-    if clean_title.startswith("http"):
-        match = re.search(r"/(?:reel|shorts|video)/([^/?]+)", clean_title)
-        item_id = match.group(1) if match else "Video"
-        clean_title = f"Sosyal Medya Video İçeriği ({item_id})"
+    if clean_title.startswith("http") or len(clean_title) < 5:
+        clean_title = "Sosyal Medya Video İçeriği"
 
     # AI Gemini expansion if AI Studio key exists
     if GEMINI_API_KEY and GEMINI_API_KEY.startswith("AIzaSy"):
@@ -118,7 +140,7 @@ def generate_full_blotato_repurpose(input_content):
     for i in range(1, 4):
         shorts_scripts.append(
             f"🎬 <b>Ssenari {i}:</b>\n"
-            f"• <b>Hook:</b> 💡 {clean_title[:60]} haqqında bunu bilirdinizmi? (Hissə {i})\n"
+            f"• <b>Hook:</b> 💡 {clean_title[:70]} haqqında bunu bilirdinizmi? (Hissə {i})\n"
             f"• <b>Səs Mətni:</b> Diqqət! {clean_title} mövzusunda {i}-ci mühüm fakt və pərdəarxası məqamlar...\n"
             f"• <b>Vizual:</b> 9:16 vertikal dinamik kadrlar, 4K vizual effektlər.\n"
         )
